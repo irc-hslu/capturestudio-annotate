@@ -1,0 +1,20 @@
+[project]
+name = "annotator-backend"
+version = "0.1.0"
+description = "FastAPI inference backend for detection and SAM2 segmentation"
+requires-python = ">=3.9"
+
+dependencies = [
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.24.0",
+    "pydantic>=2.5.0",
+    "pillow>=10.0.0",
+    "numpy>=1.23.0",
+    "opencv-python>=4.8.0.74",
+]
+
+[tool.uvicorn]
+factory = false
+host = "127.0.0.1"
+port = 8060
+reload = false
