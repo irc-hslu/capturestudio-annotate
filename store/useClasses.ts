@@ -13,7 +13,8 @@ type State = {
 const DEFAULTS: ClassDef[] = [
     { id: 0, name: "person", color: "#22c55e" },
     { id: 1, name: "guitar", color: "#f59e0b" },
-    { id: 2, name: "mic_head", color: "#a855f7" },
+    { id: 2, name: "guitar strap", color: "#f5780b" },
+    { id: 3, name: "mic_head", color: "#a855f7" },
 ];
 
 function nextColor(n: number): string {

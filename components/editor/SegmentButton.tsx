@@ -1,46 +1,16 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
-import { Button } from "@/components/ui/button";
-import { useEditor } from "@/store/useEditor";
-import { useDetections } from "@/store/useDetections";
-import type { Rotation } from "@/types/detections";
-import type { CamInfo } from "@/types/session";
-import { toast } from "sonner";
+import {useCallback, useMemo, useState} from "react";
+import {Button} from "@/components/ui/button";
+import {toast} from "sonner";
+import type {CamInfo} from "@/types/session";
+import type {DetectionItem, Rotation} from "@/types/detections";
+import {useEditor} from "@/store/useEditor";
+import {useDetections} from "@/store/useDetections";
 
-function gatherForBackend(
-    detections: any[],
-    rotation: Rotation
-): { bboxes: number[][]; points: number[][]; labels: number[] } {
-    const bboxKey = rotation === "NONE" ? "bbox" : `bbox_rotated_${rotation}`;
-    const ptsKey = rotation === "NONE" ? "points" : `points_rotated_${rotation}`;
-
-    const bboxes: number[][] = [];
-    const points: number[][] = [];
-    const labels: number[] = [];
-
-    for (const it of detections) {
-        const b = it?.[bboxKey] ?? it?.bbox;
-        if (Array.isArray(b) && b.length === 4) {
-            // store as integers per your latest requirement
-            bboxes.push(b.map((v: number) => Math.round(v)));
-        }
-
-        const pts: number[][] | undefined = it?.[ptsKey] ?? it?.points;
-        const lbls: number[] | undefined = it?.point_labels;
-        if (pts && pts.length) {
-            for (let i = 0; i < pts.length; i++) {
-                const p = pts[i];
-                const lab = (lbls?.[i] ?? 1) ? 1 : 0;
-                if (Array.isArray(p) && p.length === 2) {
-                    points.push([Math.round(p[0]), Math.round(p[1])]);
-                    labels.push(lab);
-                }
-            }
-        }
-    }
-
-    return { bboxes, points, labels };
+function getRotatedKey<T extends "bbox" | "points">(base: T, rotation: Rotation): T | `${T}_rotated_${Rotation}` {
+    if (rotation === "NONE") return base;
+    return `${base}_rotated_${rotation}` as any;
 }
 
 export function SegmentButton({sessionPath, cam, t}: {
@@ -50,63 +20,115 @@ export function SegmentButton({sessionPath, cam, t}: {
 }) {
     const {
         rotation,
-        isSegmenting,
         maskAvailable,
         maskDirty,
-        setIsSegmenting,
         setMaskAvailable,
-        setMaskDirty,
         setMaskUrl,
+        setMaskDirty,
+        setShowMask,
     } = useEditor();
 
+    // subscribe to the current detections array for this camera/stem only
     const itemsKey = `${cam.idx}:${cam.firstStem ?? "t0"}`;
-    const getForKey = useDetections((s) => s.getForKey);
-    const detections = useMemo(() => getForKey(itemsKey), [getForKey, itemsKey]);
+    const selectItems = useCallback((s: any) => s.getForKey(itemsKey), [itemsKey]);
+    // const referentialEqual = (a: any, b: any) => a === b;
+    const items: DetectionItem[] = useDetections(selectItems);
 
-    const disabled = isSegmenting || (maskAvailable && !maskDirty);
+    const [busy, setBusy] = useState(false);
 
-    const onSegment = useCallback(async () => {
-        if (!cam.firstStem) return;
-        setIsSegmenting(true);
+    // rotated view of items
+    const itemsForView = useMemo(() => {
+        const bboxKey = getRotatedKey("bbox", rotation) as keyof DetectionItem;
+        const pointsKey = getRotatedKey("points", rotation) as keyof DetectionItem;
+        return items.map((it) => {
+            const bbox = (it as any)[bboxKey] ?? undefined;
+            const points = (it as any)[pointsKey] ?? undefined;
+            return {...it, bbox, points};
+        });
+    }, [items, rotation]);
+
+    // collect bboxes (ints) and merge all points into a single group
+    const {bboxes, points, point_labels} = useMemo(() => {
+        const bb: [number, number, number, number][] = [];
+        const allPts: [number, number][] = [];
+        const allLbls: number[] = [];
+
+        for (const d of itemsForView) {
+            if (d.bbox && d.bbox.length === 4) {
+                bb.push([
+                    Math.round(Number(d.bbox[0])),
+                    Math.round(Number(d.bbox[1])),
+                    Math.round(Number(d.bbox[2])),
+                    Math.round(Number(d.bbox[3])),
+                ]);
+            }
+        }
+        for (const d of itemsForView) {
+            const pts = (d as any).points as number[][] | undefined;
+            const lbl = d.point_labels as number[] | undefined;
+            if (pts && pts.length) {
+                for (let i = 0; i < pts.length; i++) {
+                    const p = pts[i];
+                    const l = lbl?.[i] ?? 1;
+                    allPts.push([Math.round(Number(p[0])), Math.round(Number(p[1]))]);
+                    allLbls.push(l ? 1 : 0);
+                }
+            }
+        }
+        return {
+            bboxes: bb,
+            points: allPts.length ? allPts : undefined,
+            point_labels: allPts.length ? allLbls : undefined,
+        };
+    }, [itemsForView]);
+
+    // Enable if: not busy AND (mask invalid OR no mask yet)
+    const canRun = !busy && (maskDirty || !maskAvailable);
+
+    const run = useCallback(async () => {
         try {
-            const { bboxes, points, labels } = gatherForBackend(detections, rotation);
+            setBusy(true);
 
             const res = await fetch("/api/segment", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: {"Content-Type": "application/json"},
                 body: JSON.stringify({
                     sessionPath,
                     camIdx: cam.idx,
                     t,
                     rotation,
-                    stem: cam.firstStem, // save as <stem>.jpg
                     bboxes,
                     points,
-                    point_labels: labels,
+                    point_labels,
                 }),
             });
-
             const js = await res.json();
-            if (!res.ok || !js?.saved) {
+            if (!res.ok) {
                 toast.error(js?.error ?? "Segmentation failed");
+                setBusy(false);
                 return;
             }
 
-            // refresh mask url (cache-bust via v=...)
-            setMaskUrl(String(js.maskUrl));
-            setMaskAvailable(true);
-            setMaskDirty(false);
-            toast.success("Mask updated");
+            if (js?.maskUrl) {
+                // new mask produced -> treat as valid & clean
+                setMaskAvailable(true);
+                setMaskUrl(js.maskUrl);
+                setMaskDirty(false);
+                setShowMask(true); // optional: auto-show; remove if you prefer manual toggle
+                toast.success("Mask updated.");
+            } else {
+                toast.message("No mask returned.");
+            }
         } catch (e: any) {
             toast.error(String(e?.message ?? e));
         } finally {
-            setIsSegmenting(false);
+            setBusy(false);
         }
-    }, [cam.idx, cam.firstStem, detections, rotation, sessionPath, setIsSegmenting, setMaskAvailable, setMaskDirty, setMaskUrl, t]);
+    }, [sessionPath, cam.idx, t, rotation, bboxes, points, point_labels, setMaskAvailable, setMaskUrl, setMaskDirty, setShowMask]);
 
     return (
-        <Button variant="default" disabled={disabled} onClick={onSegment}>
-            {isSegmenting ? "Segmenting…" : "Apply (Segment)"}
+        <Button onClick={run} disabled={!canRun} variant="default">
+            {busy ? "Segmenting…" : "Segment"}
         </Button>
     );
 }

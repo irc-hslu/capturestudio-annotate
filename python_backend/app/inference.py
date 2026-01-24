@@ -86,7 +86,7 @@ class Sam3Wrapper:
         Run text-prompted detection via SAM3.
         """
         print('Detecting with SAM3...')
-        print('min_confidence:', min_confidence, 'class_names:', class_names)
+        print('\tmin_confidence:', min_confidence, 'class_names:', class_names)
         print('')
         if image_bgr is None or image_bgr.ndim != 3:
             return []
@@ -173,6 +173,14 @@ class Sam3Wrapper:
 
         Returns: (H,W) uint8 mask with {0,255}.
         """
+        print('Segmenting with SAM3...')
+        print('\t min_confidence:', min_confidence, 'class_names:', class_names)
+        if detections is not None:
+            print(f'\t Using {len(detections)} provided detections')
+        if points is not None:
+            print(f'\t Using {len(points)} provided point prompts with labels', point_labels)
+        print('')
+
         # Detect if detections not provided
         detections = detections or self.detect(
             image_bgr,
@@ -200,7 +208,7 @@ class Sam3Wrapper:
                 wwp = max(1.0, (x2p - x1p)) / float(W)
                 hhp = max(1.0, (y2p - y1p)) / float(H)
                 norm_point_boxes.append((float(cxp), float(cyp), float(wwp), float(hhp)))
-                norm_point_labels.append(bool(lab))
+                norm_point_labels.append(bool(1 - lab))
 
         for det in detections:
             x1, y1, x2, y2 = map(float, det["bbox"])

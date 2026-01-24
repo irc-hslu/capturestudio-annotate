@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Stage, Layer, Rect, Group, Circle, Image as KImage, Transformer } from "react-konva";
 import useImage from "use-image";
 import type { DetectionItem, Rotation } from "@/types/detections";
+import { useClasses } from "@/store/useClasses";
 import { useEditor } from "@/store/useEditor";
 
 export function AnnotationCanvas({
@@ -32,8 +33,48 @@ export function AnnotationCanvas({
     disabledInteractions?: boolean;
 }) {
     const { tool } = useEditor();
+    const { classes } = useClasses();
+    const classColorById = useMemo(() => {
+        const m: Record<number, string> = {};
+        for (const c of classes) m[c.id] = c.color;
+        return m;
+    }, [classes]);
     const containerRef = useRef<HTMLDivElement>(null);
     const [containerSize, setContainerSize] = useState({ w: 100, h: 100 });
+
+    // --- NEW: rotation helpers (minimal) ---------------------------------------
+    const rotAngle = (r: Rotation) =>
+        r === "90_CLOCKWISE" ? 90 : r === "90_COUNTERCLOCKWISE" ? -90 : r === "180" ? 180 : 0;
+
+    const rotatedDims = (w: number, h: number, r: Rotation) =>
+        r === "90_CLOCKWISE" || r === "90_COUNTERCLOCKWISE" ? { W: h, H: w } : { W: w, H: h };
+
+    function ptToView([x, y]: [number, number], W: number, H: number, r: Rotation): [number, number] {
+        switch (r) {
+            case "NONE":
+                return [x, y];
+            case "90_CLOCKWISE":
+                return [H - 1 - y, x];
+            case "90_COUNTERCLOCKWISE":
+                return [y, W - 1 - x];
+            case "180":
+                return [W - 1 - x, H - 1 - y];
+        }
+    }
+
+    function ptToBase([x, y]: [number, number], W: number, H: number, r: Rotation): [number, number] {
+        switch (r) {
+            case "NONE":
+                return [x, y];
+            case "90_CLOCKWISE":
+                return [y, H - 1 - x];
+            case "90_COUNTERCLOCKWISE":
+                return [W - 1 - y, x];
+            case "180":
+                return [W - 1 - x, H - 1 - y];
+        }
+    }
+    // ---------------------------------------------------------------------------
 
     useEffect(() => {
         const el = containerRef.current;
@@ -49,25 +90,41 @@ export function AnnotationCanvas({
     const [img] = useImage(imageUrl ?? "", "anonymous");
     const natural = useMemo(() => ({ w: img?.width ?? 1, h: img?.height ?? 1 }), [img]);
 
+    // --- CHANGED: fit now uses rotated view dimensions -------------------------
+    const { W: viewW, H: viewH } = useMemo(
+        () => rotatedDims(natural.w, natural.h, rotation),
+        [natural, rotation]
+    );
+
     const fit = useMemo(() => {
         const cw = containerSize.w,
             ch = containerSize.h;
-        const iw = natural.w,
-            ih = natural.h;
-        const s = Math.min(cw / iw, ch / ih);
-        const dw = iw * s,
-            dh = ih * s;
+        const s = Math.min(cw / viewW, ch / viewH);
+        const dw = viewW * s,
+            dh = viewH * s;
         const ox = (cw - dw) / 2,
             oy = (ch - dh) / 2;
         return { scale: s, offsetX: ox, offsetY: oy, drawW: dw, drawH: dh };
-    }, [containerSize, natural]);
+    }, [containerSize, viewW, viewH]);
+    // ---------------------------------------------------------------------------
 
+    // --- CHANGED: coords convert via rotated "view" frame ----------------------
     function toImgCoord(px: number, py: number) {
-        return { x: (px - fit.offsetX) / fit.scale, y: (py - fit.offsetY) / fit.scale };
+        // screen -> view
+        const vx = (px - fit.offsetX) / fit.scale;
+        const vy = (py - fit.offsetY) / fit.scale;
+        // view -> base
+        const [bx, by] = ptToBase([vx, vy], natural.w, natural.h, rotation);
+        return { x: bx, y: by };
     }
+
     function toScreenCoord(ix: number, iy: number) {
-        return { x: ix * fit.scale + fit.offsetX, y: iy * fit.scale + fit.offsetY };
+        // base -> view
+        const [vx, vy] = ptToView([ix, iy], natural.w, natural.h, rotation);
+        // view -> screen
+        return { x: vx * fit.scale + fit.offsetX, y: vy * fit.scale + fit.offsetY };
     }
+    // ---------------------------------------------------------------------------
 
     const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
     const [dragEnd, setDragEnd] = useState<{ x: number; y: number } | null>(null);
@@ -97,8 +154,7 @@ export function AnnotationCanvas({
         const pos = stage?.getPointerPosition();
         if (!pos) return;
 
-        const button = e.evt?.button; // 0=left, 2=right (Konva passes native)
-        // prevent native context menu always, so it never steals focus
+        const button = e.evt?.button; // 0=left, 2=right
         if (button === 2) {
             e.evt.preventDefault();
         }
@@ -106,17 +162,14 @@ export function AnnotationCanvas({
         if (tool === "points" && !hideAnnotations) {
             const { x, y } = toImgCoord(pos.x, pos.y);
             if (button === 2) {
-                // right click -> negative
                 onCreatePoint({ x: Math.round(x), y: Math.round(y), label: 0 });
             } else if (button === 0) {
-                // left click -> positive
                 onCreatePoint({ x: Math.round(x), y: Math.round(y), label: 1 });
             }
             return;
         }
 
         if (tool === "bbox" && !hideAnnotations) {
-            // only start drag with left button
             if (button !== 0) return;
             const { x, y } = toImgCoord(pos.x, pos.y);
             setDragStart({ x, y });
@@ -153,8 +206,8 @@ export function AnnotationCanvas({
             setDragEnd(null);
             return;
         }
-        let x1 = Math.min(dragStart.x, dragEnd.x);
-        let y1 = Math.min(dragStart.y, dragEnd.y);
+        let x1 = Math.min(dragStart.x, dragEnd.y === undefined ? dragStart.y : dragEnd.x);
+        let y1 = Math.min(dragStart.y, dragEnd.y === undefined ? dragStart.y : dragEnd.y);
         let x2 = Math.max(dragStart.x, dragEnd.x);
         let y2 = Math.max(dragStart.y, dragEnd.y);
         x1 = Math.round(x1);
@@ -166,15 +219,6 @@ export function AnnotationCanvas({
         setDragEnd(null);
     }
 
-    const classesColors: Record<number, string> = useMemo(() => {
-        const palette = ["#ff3838", "#ff9f38", "#ffff38", "#38ff38", "#38ffff", "#3838ff", "#9f38ff", "#ff389f"];
-        const map: Record<number, string> = {};
-        detections.forEach((d) => {
-            if (typeof d.class_id === "number") map[d.class_id] = palette[d.class_id % palette.length];
-        });
-        return map;
-    }, [detections]);
-
     return (
         <div ref={containerRef} className="w-full h-full">
             <Stage
@@ -183,14 +227,34 @@ export function AnnotationCanvas({
                 onMouseDown={onMouseDown}
                 onMouseMove={onMouseMove}
                 onMouseUp={onMouseUp}
-                // block native context menu so right-click never triggers the browser menu
                 onContextMenu={(e) => {
                     e.evt?.preventDefault?.();
                 }}
             >
                 <Layer listening={!disabledInteractions}>
                     {img && (
-                        <KImage image={img} x={fit.offsetX} y={fit.offsetY} width={fit.drawW} height={fit.drawH} listening={false} />
+                        // CHANGED: draw rotated image, scaled to fit the rotated rectangle
+                        <KImage
+                            image={img}
+                            // place at center of the draw rect
+                            x={fit.offsetX + fit.drawW / 2}
+                            y={fit.offsetY + fit.drawH / 2}
+                            offsetX={natural.w / 2}
+                            offsetY={natural.h / 2}
+                            rotation={rotAngle(rotation)}
+                            // scale so its axis-aligned box equals drawW x drawH
+                            scaleX={
+                                rotAngle(rotation) === 0 || rotAngle(rotation) === 180
+                                    ? fit.drawW / natural.w
+                                    : fit.drawW / natural.h
+                            }
+                            scaleY={
+                                rotAngle(rotation) === 0 || rotAngle(rotation) === 180
+                                    ? fit.drawH / natural.h
+                                    : fit.drawH / natural.w
+                            }
+                            listening={false}
+                        />
                     )}
 
                     {!hideAnnotations &&
@@ -211,13 +275,14 @@ export function AnnotationCanvas({
                                         y={p1.y}
                                         width={w}
                                         height={h}
-                                        stroke={classesColors[d.class_id ?? 0] ?? "#00f"}
+                                        stroke={classColorById[d.class_id ?? 0] ?? "#00f"}
                                         strokeWidth={isSelected ? 3 : 2}
                                         listening={!disabledInteractions && tool === "select"}
                                         draggable={!disabledInteractions && tool === "select"}
                                         onClick={() => setSelectedIndex(i)}
                                         onTap={() => setSelectedIndex(i)}
                                         onDragEnd={(e) => {
+                                            // node coords are in screen space; convert back to base image coords
                                             const tl = toImgCoord(e.target.x(), e.target.y());
                                             const br = toImgCoord(e.target.x() + e.target.width(), e.target.y() + e.target.height());
                                             onUpdateBBox(i, [Math.round(tl.x), Math.round(tl.y), Math.round(br.x), Math.round(br.y)]);

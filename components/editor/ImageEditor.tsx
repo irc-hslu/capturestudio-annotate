@@ -53,6 +53,7 @@ export function ImageEditor({
         maskUrl,
         setMaskUrl,
         invalidateMask,
+        setMaskDirty,
     } = useEditor();
 
     const { classes, activeClassId } = useClasses();
@@ -60,13 +61,13 @@ export function ImageEditor({
     // detections store: subscribe only to this key's array
     const itemsKey = `${cam.idx}:${cam.firstStem ?? "t0"}`;
     const selectItems = useCallback((s: any) => s.getForKey(itemsKey), [itemsKey]);
-    const referentialEqual = (a: any, b: any) => a === b;
-    const items: DetectionItem[] = useDetections(selectItems, referentialEqual);
+    const items: DetectionItem[] = useDetections(selectItems);
     const setForKey = useDetections((s) => s.setForKey);
 
     const [imgUrl, setImgUrl] = useState<string | null>(null);
     const [loadingImg, setLoadingImg] = useState(true);
     const [editIndex, setEditIndex] = useState<number | null>(null); // selection index for editing a bbox (draggable/transformer)
+    const [detecting, setDetecting] = useState(false); // NEW: track in-flight detection
 
     // host ref for both canvas and overlay (so they share identical geometry)
     const hostRef = useRef<HTMLDivElement>(null);
@@ -117,6 +118,9 @@ export function ImageEditor({
             if (!cam.firstStem) {
                 setMaskAvailable(false);
                 setMaskUrl(null);
+                // reset mask state on image change
+                setShowMask(false);
+                setMaskDirty(false);
                 return;
             }
             const url = `/api/mask/get?sessionPath=${encodeURIComponent(sessionPath)}&camIdx=${cam.idx}&stem=${cam.firstStem}&v=${Date.now()}`;
@@ -129,6 +133,9 @@ export function ImageEditor({
                     setMaskAvailable(false);
                     setMaskUrl(null);
                 }
+                // always start “clean” and hidden on image load
+                setShowMask(false);
+                setMaskDirty(false);
             }
         })();
         return () => {
@@ -185,23 +192,28 @@ export function ImageEditor({
     );
 
     const detectPersons = useCallback(async () => {
-        const res = await fetch("/api/detect", {
-            method: "POST",
-            body: JSON.stringify({
-                sessionPath,
-                camIdx: cam.idx,
-                t,
-                rotation, // server rotates pixels for inference
-            }),
-        });
-        if (!res.ok) {
-            toast.error("Detection failed.");
-            return;
+        setDetecting(true); // NEW
+        try {
+            const res = await fetch("/api/detect", {
+                method: "POST",
+                body: JSON.stringify({
+                    sessionPath,
+                    camIdx: cam.idx,
+                    t,
+                    rotation, // server rotates pixels for inference
+                }),
+            });
+            if (!res.ok) {
+                toast.error("Detection failed.");
+                return;
+            }
+            const js = await res.json();
+            const preds: DetectionItem[] = js.detections ?? [];
+            for (const d of preds) await upsert(d, null);
+            toast.success(`Added ${preds.length} detections`);
+        } finally {
+            setDetecting(false); // NEW
         }
-        const js = await res.json();
-        const preds: DetectionItem[] = js.detections ?? [];
-        for (const d of preds) await upsert(d, null);
-        toast.success(`Added ${preds.length} detections`);
     }, [sessionPath, cam.idx, t, rotation, upsert]);
 
     const activeClass = classes.find((c) => c.id === (activeClassId ?? -1));
@@ -211,12 +223,11 @@ export function ImageEditor({
 
     const appendPointToSingleGroup = useCallback(
         async (pt: [number, number], label: 0 | 1) => {
-            // itemsForView = items normalized for the current rotation/time
-            // Find an index in *this view* that already holds points
-            const groupIdxInView = itemsForView.findIndex((it) => Array.isArray((it as any).points) && (it as any).points.length > 0);
+            const groupIdxInView = itemsForView.findIndex(
+                (it) => Array.isArray((it as any).points) && (it as any).points.length > 0
+            );
 
             if (groupIdxInView >= 0) {
-                // Update existing group
                 const base = items[groupIdxInView];
                 const prevPts =
                     ((base as any)[getRotatedKey("points", rotation)] as number[][] | undefined) ??
@@ -233,12 +244,11 @@ export function ImageEditor({
                     groupIdxInView
                 );
             } else {
-                // Create the single group for this image/timestep
                 await upsert({
                     points: [[Math.round(pt[0]), Math.round(pt[1])]],
                     point_labels: [label],
                     confidence: 1.0,
-                    class_name: "point", // harmless label; not used for training
+                    class_name: "point",
                     class_id: 0,
                 });
             }
@@ -251,7 +261,8 @@ export function ImageEditor({
             {/* Canvas + HUD */}
             <Card className="col-span-8 p-2 overflow-hidden flex flex-col">
                 <div className="flex items-center justify-between">
-                    <Toolbar onDetect={detectPersons} disabled={editingDisabled} />
+                    {/* pass disabled + detecting to Toolbar */}
+                    <Toolbar onDetect={detectPersons} disabled={editingDisabled} detecting={detecting} />
                     <div className="flex items-center gap-3">
                         {/* Show Mask switch only if a mask exists */}
                         {maskAvailable && (
@@ -272,7 +283,6 @@ export function ImageEditor({
                         loading={loadingImg}
                         rotation={rotation}
                         detections={itemsForView}
-                        interactive={!editingDisabled}
                         hideAnnotations={showMask} // hide shapes when showing mask
                         editIndex={editIndex}
                         onEditIndexCleared={() => setEditIndex(null)}
@@ -293,10 +303,7 @@ export function ImageEditor({
                         }}
                         onUpdateBBox={async (index, xyxy) => {
                             const base = items[index];
-                            await upsert(
-                                { ...base, bbox: xyxy.map((v) => Math.round(Number(v))) as any },
-                                index
-                            );
+                            await upsert({ ...base, bbox: xyxy.map((v) => Math.round(Number(v))) as any }, index);
                         }}
                     />
 

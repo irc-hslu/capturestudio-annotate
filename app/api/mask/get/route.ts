@@ -4,27 +4,32 @@ import { promises as fs } from "fs";
 
 export const runtime = "nodejs";
 
+function pad2(n: number) {
+    return String(n).padStart(2, "0");
+}
+
 export async function GET(req: NextRequest) {
     try {
-        const sessionPath = req.nextUrl.searchParams.get("sessionPath") || "";
-        const camIdxStr = req.nextUrl.searchParams.get("camIdx") || "";
-        const stem = req.nextUrl.searchParams.get("stem") || "";
+        const { searchParams } = new URL(req.url);
+        const sessionPath = searchParams.get("sessionPath");
+        const camIdx = searchParams.get("camIdx");
+        const stem = searchParams.get("stem");
 
-        if (!sessionPath || !camIdxStr || !stem) {
+        if (!sessionPath || !camIdx || !stem) {
             return NextResponse.json({ error: "sessionPath, camIdx, stem required" }, { status: 400 });
         }
 
-        const cam = String(parseInt(camIdxStr, 10)).padStart(2, "0");
-        const file = path.join(sessionPath, "orbbec", `cam${cam}`, "mask", `${stem}.jpg`);
-
-        const buf = await fs.readFile(file);
-        return new NextResponse(buf, {
+        const cam = pad2(parseInt(camIdx, 10));
+        const maskPath = path.join(sessionPath, "orbbec", `cam${cam}`, "mask", `${stem}.jpg`);
+        const data = await fs.readFile(maskPath);
+        return new NextResponse(data, {
+            status: 200,
             headers: {
                 "Content-Type": "image/jpeg",
                 "Cache-Control": "no-store",
             },
         });
-    } catch {
-        return NextResponse.json({ error: "mask not found" }, { status: 404 });
+    } catch (e: any) {
+        return NextResponse.json({ error: "Mask not found" }, { status: 404 });
     }
 }

@@ -30,7 +30,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-_sam = Sam3Wrapper(default_classes=('person', 'guitar', 'guitar strap', 'guitar band', 'drums', 'piano', 'keyboard', 'microphone head', 'recording microphone dust cover'))
+_sam = Sam3Wrapper(default_classes=('person', 'guitar', 'guitar strap', 'guitar band', 'drums', 'piano', 'microphone head', 'recording microphone dust cover'))
 
 
 @app.get("/healthz")
