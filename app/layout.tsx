@@ -1,8 +1,8 @@
 import './globals.css';
 
 export const metadata = {
-    title: 'Multicam Annotator',
-    description: 'Annotate multicam frames',
+    title: 'HSLU Capturestudio Annotator',
+    description: 'Annotate multiview frames from HSLU Capturestudio',
 };
 
 export default function RootLayout({children}: { children: React.ReactNode }) {

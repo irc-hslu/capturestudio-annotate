@@ -1,5 +1,5 @@
 {
-  "name": "multicam-annotator",
+  "name": "hslu-capturestudio-annotator",
   "version": "0.1.0",
   "private": true,
   "description": "Multi-Cam Annotation UI (Next.js + Tailwind + shadcn/ui)",

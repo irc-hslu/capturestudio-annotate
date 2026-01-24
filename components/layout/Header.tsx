@@ -10,7 +10,7 @@ export function Header() {
     return (
         <div className="border-b bg-background">
             <div className="h-12 max-w-7xl mx-auto flex items-center justify-between px-4">
-                <div className="font-semibold">Multicam Annotator</div>
+                <div className="font-semibold">HSLU Capturestudio Annotator</div>
                 <Tabs
                     value={current}
                     onValueChange={(v) => {
