@@ -2,3 +2,4 @@ node_modules
 .next
 *.d.ts
 pnpm-lock.yaml
+.venv
