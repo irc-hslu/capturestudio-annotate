@@ -2,16 +2,34 @@
 name = "annotator-backend"
 version = "0.1.0"
 description = "FastAPI inference backend for detection and SAM2 segmentation"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 
 dependencies = [
+    "decord",
+    "einops",
     "fastapi>=0.110.0",
     "uvicorn[standard]>=0.24.0",
     "pydantic>=2.5.0",
     "pillow>=10.0.0",
     "numpy>=1.23.0",
     "opencv-python>=4.8.0.74",
+    "pip",
+    "psutil",
+    "pycocotools",
+    "setuptools<82",
+    "torch>=2.9.1",
+    "torchvision>=0.24.1",
+    "sam3",
+    "wheel",
 ]
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.uv.sources]
+sam3 = { git = "https://github.com/facebookresearch/sam3.git" }
 
 [tool.uvicorn]
 factory = false
