@@ -49,7 +49,7 @@ def main():
     parser.add_argument("--backend-host", default="127.0.0.1", help="Backend bind host")
     parser.add_argument("--backend-port", type=int, default=8060, help="Backend port")
     parser.add_argument("--frontend-dir", default='../', help="Path to Next.js app root")
-    parser.add_argument("--frontend-port", type=int, default=3000, help="Next.js port")
+    parser.add_argument("--frontend-port", type=int, default=3001, help="Next.js port")
     parser.add_argument("--frontend-mode", choices=["dev", "start"], default="dev")
     parser.add_argument("--build", action="store_true", help="Build Next app before start (only for mode 'start')")
     parser.add_argument("--open", action="store_true", help="Open browser at frontend URL")
