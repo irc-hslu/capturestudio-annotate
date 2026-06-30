@@ -1,10 +1,3 @@
-/**
- * Person detector wrapper.
- * Replace `runPersonModel` with your implementation. This wrapper rotates pixels first
- * (so the model sees the same orientation the user sees) and returns XYXY boxes
- * already aligned to the rotated UI coordinate system.
- */
-
 import { promises as fs } from "fs";
 import type { Rotation, DetectionItem } from "@/types/detections";
 
