@@ -69,16 +69,14 @@ Hochschule Luzern
    ```
 
 3. **Install Python backend dependencies** in a virtual environment
-   (Python 3.10 or later):
+   (we use `uv` package manager so make sure it is installed system-wide):
 
    ```bash
    cd python_backend
-   python -m venv .venv
+   uv sync
    # Activate the virtual environment
    source .venv/bin/activate  # on Linux/macOS
    # .venv\Scripts\activate   # on Windows
-
-   pip install -r requirements.txt
    ```
 
 ## Running the Application

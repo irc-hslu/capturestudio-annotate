@@ -55,13 +55,13 @@ export async function runSAM2(params: {
     const bytes = await fs.readFile(params.imagePath);
     const rotated = await rotateBufferIfNeeded(bytes, params.rotation);
 
-    // Call your SAM2 function on the rotated pixels
+    // Call the SAM2 function on the rotated pixels
     const rawMask = await segmentWithSAM2(rotated, {
         positivePoints: params.positivePoints ?? [],
         negativePoints: params.negativePoints ?? [],
     });
 
-    // Ensure PNG base64 (if your SAM2 returns raw logits, produce a PNG here)
+    // Ensure PNG base64 (if SAM2 returns raw logits, produce a PNG here)
     const pngBytes = Buffer.isBuffer(rawMask) ? rawMask : Buffer.from(rawMask);
     const maskPngBase64 = `data:image/png;base64,${pngBytes.toString("base64")}`;
     return { maskPngBase64 };
