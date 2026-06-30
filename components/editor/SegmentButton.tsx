@@ -13,7 +13,16 @@ function getRotatedKey<T extends "bbox" | "points">(base: T, rotation: Rotation)
     return `${base}_rotated_${rotation}` as any;
 }
 
-export function SegmentButton({sessionPath, cam, t}: {
+function frameIdxOf(it: DetectionItem): number {
+    const v = (it as any).frame_idx;
+    return typeof v === "number" ? Math.floor(v) : 0;
+}
+
+export function SegmentButton({
+                                  sessionPath,
+                                  cam,
+                                  t,
+                              }: {
     sessionPath: string;
     cam: CamInfo;
     t: number;
@@ -28,26 +37,24 @@ export function SegmentButton({sessionPath, cam, t}: {
         setShowMask,
     } = useEditor();
 
-    // subscribe to the current detections array for this camera/stem only
     const itemsKey = `${cam.idx}:${cam.firstStem ?? "t0"}`;
     const selectItems = useCallback((s: any) => s.getForKey(itemsKey), [itemsKey]);
-    // const referentialEqual = (a: any, b: any) => a === b;
     const items: DetectionItem[] = useDetections(selectItems);
 
     const [busy, setBusy] = useState(false);
 
-    // rotated view of items
+    const frameItems = useMemo(() => items.filter((it) => frameIdxOf(it) === t), [items, t]);
+
     const itemsForView = useMemo(() => {
         const bboxKey = getRotatedKey("bbox", rotation) as keyof DetectionItem;
         const pointsKey = getRotatedKey("points", rotation) as keyof DetectionItem;
-        return items.map((it) => {
+        return frameItems.map((it) => {
             const bbox = (it as any)[bboxKey] ?? undefined;
             const points = (it as any)[pointsKey] ?? undefined;
             return {...it, bbox, points};
         });
-    }, [items, rotation]);
+    }, [frameItems, rotation]);
 
-    // collect bboxes (ints) and merge all points into a single group
     const {bboxes, points, point_labels} = useMemo(() => {
         const bb: [number, number, number, number][] = [];
         const allPts: [number, number][] = [];
@@ -63,6 +70,7 @@ export function SegmentButton({sessionPath, cam, t}: {
                 ]);
             }
         }
+
         for (const d of itemsForView) {
             const pts = (d as any).points as number[][] | undefined;
             const lbl = d.point_labels as number[] | undefined;
@@ -75,6 +83,7 @@ export function SegmentButton({sessionPath, cam, t}: {
                 }
             }
         }
+
         return {
             bboxes: bb,
             points: allPts.length ? allPts : undefined,
@@ -82,7 +91,6 @@ export function SegmentButton({sessionPath, cam, t}: {
         };
     }, [itemsForView]);
 
-    // Enable if: not busy AND (mask invalid OR no mask yet)
     const canRun = !busy && (maskDirty || !maskAvailable);
 
     const run = useCallback(async () => {
@@ -105,16 +113,14 @@ export function SegmentButton({sessionPath, cam, t}: {
             const js = await res.json();
             if (!res.ok) {
                 toast.error(js?.error ?? "Segmentation failed");
-                setBusy(false);
                 return;
             }
 
             if (js?.maskUrl) {
-                // new mask produced -> treat as valid & clean
                 setMaskAvailable(true);
                 setMaskUrl(js.maskUrl);
                 setMaskDirty(false);
-                setShowMask(true); // optional: auto-show; remove if you prefer manual toggle
+                setShowMask(true);
                 toast.success("Mask updated.");
             } else {
                 toast.message("No mask returned.");

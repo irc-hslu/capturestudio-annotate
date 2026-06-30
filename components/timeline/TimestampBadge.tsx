@@ -6,19 +6,19 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export function TimestampBadge({
-                                   baseT,
-                                   offset,
-                                   active,
-                                   onSelect,
-                                   onRemove,
-                               }: {
+    baseT,
+    offset,
+    active,
+    onSelect,
+    onRemove,
+}: {
     baseT: number;
     offset: number;
     active?: boolean;
     onSelect?: () => void;
     onRemove?: () => void;
 }) {
-    const label = offset === 0 ? `t0` : offset > 0 ? `t+${offset}` : `t${offset}`;
+    const label = `t=${baseT + offset}`;
     return (
         <div className={cn("inline-flex items-center gap-1")}>
             <Badge

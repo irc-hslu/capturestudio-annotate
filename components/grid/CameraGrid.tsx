@@ -1,8 +1,20 @@
 "use client";
 
-import { CamInfo } from "@/types/session";
-import { CameraThumb } from "./CameraThumb";
-import { Separator } from "@/components/ui/separator";
+import {CamInfo} from "@/types/session";
+import {CameraThumb} from "./CameraThumb";
+import {Separator} from "@/components/ui/separator";
+
+function clampInt(n: number, lo: number, hi: number) {
+    return Math.min(Math.max(lo, Math.floor(n)), hi);
+}
+
+function camMaxIndex(cam: CamInfo): number {
+    const anyCam = cam as any;
+    const nFromFrames = Array.isArray((cam as any).frames) ? (cam as any).frames.length : 0;
+    const nFromNumFrames = typeof anyCam.numFrames === "number" ? anyCam.numFrames : 0;
+    const n = Math.max(nFromFrames, nFromNumFrames);
+    return Math.max(0, n - 1);
+}
 
 export function CameraGrid({
                                sessionPath,
@@ -23,15 +35,14 @@ export function CameraGrid({
 
     return (
         <div className="w-full">
-            {sortedOffsets.map((off) => (
+            {sortedOffsets.map((off, i) => (
                 <div key={off} className="mb-3">
-                    <div className="text-xs text-muted-foreground mb-2 px-1">
-                        {off === 0 ? "t0" : off > 0 ? `t+${off}` : `t${off}`}
-                    </div>
+                    <div className="text-xs text-muted-foreground mb-2 px-1">{`t=${off}`}</div>
 
                     <div className="grid gap-2 [grid-template-columns:repeat(auto-fill,minmax(160px,1fr))] w-full">
                         {cams.map((cam) => {
-                            const t = Math.max(0, off);
+                            const hi = camMaxIndex(cam);
+                            const t = clampInt(off, 0, hi);
                             const active = activeCamIdx === cam.idx && activeT === t;
                             return (
                                 <CameraThumb
@@ -46,7 +57,7 @@ export function CameraGrid({
                         })}
                     </div>
 
-                    <Separator className="mt-3" />
+                    {i < sortedOffsets.length - 1 && <Separator className="mt-3"/>}
                 </div>
             ))}
         </div>

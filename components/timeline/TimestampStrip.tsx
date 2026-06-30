@@ -1,62 +1,72 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { TimestampBadge } from "./TimestampBadge";
 import { Separator } from "@/components/ui/separator";
 import { Plus } from "lucide-react";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Slider } from "@/components/ui/slider";
 
 export type TimestampStripProps = {
     baseT?: number; // usually 0
-    offsets: number[]; // includes 0 (base) and extra positive/negative frame offsets
+    offsets: number[]; // includes 0 (base) and extra time steps
     selectedOffset: number;
     onSelect: (offset: number) => void;
     onAdd: (offset: number) => void;
     onRemove: (offset: number) => void;
+
+    // NEW: slider bounds
+    minOffset?: number;
+    maxOffset?: number;
+
+    // NEW: show title and right-floating add button
+    title?: string;
 };
 
-export function TimestampStrip({
-                                   baseT = 0,
-                                   offsets,
-                                   selectedOffset,
-                                   onSelect,
-                                   onAdd,
-                                   onRemove,
-                               }: TimestampStripProps) {
-    const [val, setVal] = useState<string>("");
+function clampInt(n: number, lo: number, hi: number) {
+    return Math.min(Math.max(lo, Math.floor(n)), hi);
+}
 
+export function TimestampStrip({
+    baseT = 0,
+    offsets,
+    selectedOffset,
+    onSelect,
+    onAdd,
+    onRemove,
+    minOffset = 0,
+    maxOffset = 0,
+    title = "Timeline",
+}: TimestampStripProps) {
     const sorted = useMemo(() => [...offsets].sort((a, b) => a - b), [offsets]);
+
+    const [open, setOpen] = useState(false);
+    const [sliderVal, setSliderVal] = useState<number[]>([0]);
+
+    useEffect(() => {
+        const hi = Math.max(minOffset, maxOffset);
+        const v = clampInt(selectedOffset, minOffset, hi);
+        setSliderVal([v]);
+    }, [selectedOffset, minOffset, maxOffset]);
+
+    const hi = Math.max(minOffset, maxOffset);
+    const current = clampInt(sliderVal[0] ?? 0, minOffset, hi);
 
     return (
         <div className="w-full flex flex-col gap-2 p-2">
-            <div className="flex items-center gap-2">
-                <Input
-                    className="max-w-[140px]"
-                    value={val}
-                    onChange={(e) => setVal(e.target.value)}
-                    placeholder="Offset (frames)"
-                    onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                            const n = parseInt(val, 10);
-                            if (!Number.isNaN(n)) {
-                                onAdd(n);
-                                setVal("");
-                            }
-                        }
-                    }}
-                />
+            {/* Title + right-floating button in same row */}
+            <div className="flex items-center justify-between gap-2">
+                <div className="text-base font-semibold">{title}</div>
                 <Button
                     variant="outline"
                     onClick={() => {
-                        const n = parseInt(val, 10);
-                        if (!Number.isNaN(n)) {
-                            onAdd(n);
-                            setVal("");
-                        }
+                        const v = clampInt(selectedOffset, minOffset, hi);
+                        setSliderVal([v]);
+                        setOpen(true);
                     }}
                 >
-                    <Plus className="w-4 h-4 mr-1" /> Add Timestamp
+                    <Plus className="w-4 h-4 mr-1" /> Add time step
                 </Button>
             </div>
 
@@ -74,6 +84,48 @@ export function TimestampStrip({
                     />
                 ))}
             </div>
+
+            <Dialog open={open} onOpenChange={setOpen}>
+                <DialogContent className="max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Select time step</DialogTitle>
+                    </DialogHeader>
+
+                    <div className="flex flex-col gap-3">
+                        <div className="text-sm text-muted-foreground">
+                            t = <span className="font-medium text-foreground">{current}</span>
+                        </div>
+
+                        <Slider
+                            min={minOffset}
+                            max={hi}
+                            step={1}
+                            value={[current]}
+                            onValueChange={(v) => {
+                                const n = clampInt(v[0] ?? 0, minOffset, hi);
+                                setSliderVal([n]);
+                            }}
+                        />
+                        <div className="text-xs text-muted-foreground">
+                            Range: [{minOffset}, {hi}]
+                        </div>
+                    </div>
+
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setOpen(false)}>
+                            Cancel
+                        </Button>
+                        <Button
+                            onClick={() => {
+                                onAdd(current);
+                                setOpen(false);
+                            }}
+                        >
+                            Add
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

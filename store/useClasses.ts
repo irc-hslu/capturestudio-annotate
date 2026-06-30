@@ -24,7 +24,7 @@ function nextColor(n: number): string {
 }
 
 export const useClasses = create<State>((set, get) => ({
-    classes: DEFAULTS,
+    classes: DEFAULTS.slice(),
     activeClassId: 0,
     addClass: (name, color) =>
         set((s) => {

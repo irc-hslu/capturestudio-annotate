@@ -1,8 +1,8 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useState } from "react";
-import { cn } from "@/lib/utils";
+import {useEffect, useState} from "react";
+import {cn} from "@/lib/utils";
 
 export function CameraThumb({
                                 sessionPath,
@@ -21,16 +21,22 @@ export function CameraThumb({
 
     useEffect(() => {
         let alive = true;
+        let objUrl: string | null = null;
+
         const u = `/api/image?sessionPath=${encodeURIComponent(sessionPath)}&camIdx=${camIdx}&t=${t}`;
         fetch(u)
             .then((r) => (r.ok ? r.blob() : Promise.reject()))
             .then((b) => {
                 if (!alive) return;
-                setUrl(URL.createObjectURL(b));
+                objUrl = URL.createObjectURL(b);
+                setUrl(objUrl);
             })
-            .catch(() => {});
+            .catch(() => {
+            });
+
         return () => {
             alive = false;
+            if (objUrl) URL.revokeObjectURL(objUrl);
         };
     }, [sessionPath, camIdx, t]);
 
@@ -44,7 +50,7 @@ export function CameraThumb({
             title={`cam${String(camIdx).padStart(2, "0")} t=${t}`}
         >
             {url ? (
-                <Image src={url} alt="" fill className="object-cover" />
+                <Image src={url} alt="" fill className="object-cover"/>
             ) : (
                 <div className="absolute inset-0 flex items-center justify-center text-xs text-muted-foreground">
                     Loading…

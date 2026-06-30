@@ -279,7 +279,8 @@ if __name__ == "__main__":
     from torchvision.utils import draw_bounding_boxes, draw_segmentation_masks
     from torchvision.transforms.functional import to_pil_image
 
-    image_path_ = "/root/capturestudio2/out/reconstructions/Aljosa_1_Perf_1/orbbec/cam08/color/1742051538059.jpg"
+    # image_path_ = "/root/capturestudio2/out/reconstructions/Aljosa_1_Perf_1/orbbec/cam08/color/1742051538059.jpg"
+    image_path_ = "/root/capturestudio2/out/Cagliari_1_Perf_7/orbbec/cam07/color/11512338.jpg"
     img_bgr_ = cv2.imread(image_path_, cv2.IMREAD_COLOR)
     if img_bgr_ is None:
         raise SystemExit(f"Could not read image: {image_path_}")
